@@ -90,10 +90,14 @@
                 <button class="btn btn-primary" id="btn-new-note">
                     <i data-lucide="plus"></i> 新建笔记
                 </button>
+                <button class="btn" id="btn-import-notes" title="导入 Obsidian 笔记">
+                    <i data-lucide="upload"></i> 导入
+                </button>
                 <button class="btn" id="btn-open-graph" title="查看笔记关系图">
                     <i data-lucide="git-branch"></i> 关系图
                 </button>
             </div>
+            <input type="file" id="note-file-input" accept=".md" multiple style="display:none">
         </div>
         <div id="notes-container" class="notes-grid-wrap"></div>
     </main>
@@ -139,10 +143,23 @@
             </div>
             <!-- 阅读热力图 -->
             <div class="chart-card" style="margin-top:24px;">
-                <h3 class="chart-title">阅读热力图</h3>
+                <div class="heatmap-header">
+                    <h3 class="chart-title" style="margin-bottom:0;">阅读热力图</h3>
+                    <div class="toggle-group" id="heatmap-toggle">
+                        <button class="toggle-btn active" data-view="week">周</button>
+                        <button class="toggle-btn" data-view="month">月</button>
+                        <button class="toggle-btn" data-view="year">年</button>
+                        <div class="toggle-slider"></div>
+                    </div>
+                </div>
                 <div class="heatmap-wrap" style="position:relative;">
                     <canvas id="chart-heatmap"></canvas>
                 </div>
+            </div>
+            <!-- 阅读时段分布 -->
+            <div class="chart-card" style="margin-top:24px;">
+                <h3 class="chart-title">阅读时段分布</h3>
+                <canvas id="chart-time-period"></canvas>
             </div>
             <!-- 论文统计 -->
             <h3 class="section-subtitle"><i data-lucide="file-text"></i> 论文</h3>
@@ -451,6 +468,9 @@
                 <button class="cover-type-btn" data-cover-type="geometry">
                     <i data-lucide="pentagon"></i> 几何
                 </button>
+            </div>
+            <div class="cover-subtype-row" id="cover-subtype-row">
+                <select id="cover-subtype-select" class="cover-subtype-select"></select>
             </div>
             <div class="cover-canvas-wrap">
                 <canvas id="cover-canvas" width="300" height="440"></canvas>

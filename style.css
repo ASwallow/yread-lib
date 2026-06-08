@@ -760,9 +760,9 @@ body::before {
 .dashboard-wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
 .section-title { font-size: 22px; font-weight: 700; margin-bottom: 24px; }
 .section-subtitle {
-    font-size: 16px; font-weight: 600; margin: 32px 0 16px;
+    font-size: 17px; font-weight: 700; margin: 32px 0 16px;
     display: flex; align-items: center; gap: 8px;
-    color: var(--text-secondary);
+    color: var(--text-primary);
 }
 .section-subtitle svg { width: 18px; height: 18px; }
 
@@ -774,24 +774,51 @@ body::before {
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 .stat-cards-sm .stat-card { padding: 16px; }
-.stat-cards-sm .stat-number { font-size: 1.6rem; }
+.stat-cards-sm .stat-number { font-size: 1.5rem; }
+.stat-cards-sm .stat-label { font-size: 13px; }
 .stat-card {
-    background: var(--bg-surface); border: 1px solid var(--border);
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border);
     border-radius: 16px; padding: 24px; text-align: center;
+    backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
+body.light-theme .stat-card {
+    background: rgba(255,255,255,0.45); border-color: rgba(0,0,0,0.08);
 }
 .stat-number {
-    font-size: 2.5rem; font-weight: 700;
+    font-size: 2.2rem; font-weight: 800;
     background: var(--accent-gradient);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
-.stat-label { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.stat-label { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 6px; }
 
 .chart-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
 .chart-card {
-    background: var(--bg-surface); border: 1px solid var(--border);
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border);
     border-radius: 16px; padding: 24px;
+    backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3);
 }
-.chart-title { font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 16px; }
+body.light-theme .chart-card {
+    background: rgba(255,255,255,0.45); border-color: rgba(0,0,0,0.08);
+}
+.chart-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; }
+
+/* 热力图头部 + 拨动式切换按钮 */
+.heatmap-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.toggle-group {
+    display: flex; position: relative; background: var(--bg-surface);
+    border: 1px solid var(--border); border-radius: 10px; padding: 3px;
+}
+.toggle-btn {
+    position: relative; z-index: 1; padding: 5px 14px; border: none; background: transparent;
+    color: var(--text-secondary); font-size: 12px; font-weight: 500; cursor: pointer;
+    border-radius: 8px; transition: color 0.25s;
+}
+.toggle-btn.active { color: #fff; }
+.toggle-slider {
+    position: absolute; top: 3px; height: calc(100% - 6px);
+    background: var(--accent); border-radius: 8px;
+    transition: left 0.3s cubic-bezier(0.4,0,0.2,1), width 0.3s cubic-bezier(0.4,0,0.2,1);
+}
 
 /* ============================================================
    搜索弹窗
@@ -893,6 +920,12 @@ body::before {
     background: var(--accent); border-color: var(--accent); color: #fff;
 }
 .cover-type-btn svg { width: 16px; height: 16px; }
+.cover-subtype-row { margin-bottom: 12px; display: flex; justify-content: center; }
+.cover-subtype-select {
+    padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg-surface); color: var(--text-primary); font-size: 13px;
+    cursor: pointer; min-width: 160px;
+}
 
 /* ============================================================
    每本书阅读时长表格
@@ -905,11 +938,11 @@ body::before {
     transition: background 0.2s;
 }
 .per-book-row:hover { background: var(--bg-surface-hover); }
-.per-book-rank { font-size: 13px; font-weight: 600; color: var(--text-tertiary); min-width: 24px; text-align: center; }
-.per-book-name { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.per-book-rank { font-size: 14px; font-weight: 700; color: var(--text-primary); min-width: 24px; text-align: center; }
+.per-book-name { flex: 1; font-size: 14px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .per-book-bar-wrap { flex: 1.5; height: 6px; border-radius: 3px; background: var(--bg-surface-hover); overflow: hidden; }
 .per-book-bar-fill { height: 100%; border-radius: 3px; background: var(--accent-gradient-fill); transition: width 0.5s ease; }
-.per-book-time { font-size: 13px; color: var(--text-secondary); min-width: 60px; text-align: right; }
+.per-book-time { font-size: 13px; font-weight: 600; color: var(--text-primary); min-width: 60px; text-align: right; }
 .per-book-empty { text-align: center; color: var(--text-quaternary); font-size: 14px; padding: 32px 0; }
 
 /* ============================================================
@@ -1996,6 +2029,20 @@ body.light-theme .note-color-swatch.none {
     opacity: 0.5;
 }
 .empty-notes svg { width: 64px; height: 64px; color: var(--text-quaternary); }
+
+/* Obsidian 导入样式 */
+.wikilink {
+    color: var(--accent); text-decoration: none; border-bottom: 1px dashed var(--accent);
+    cursor: pointer; transition: opacity 0.2s;
+}
+.wikilink:hover { opacity: 0.7; }
+.note-embedded-img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+.note-embedded-file {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 8px; background: var(--bg-surface);
+    border: 1px solid var(--border); font-size: 13px; color: var(--text-secondary);
+    margin: 6px 0;
+}
 .empty-notes p { color: var(--text-tertiary); font-size: 15px; }
 
 /* ============================================================

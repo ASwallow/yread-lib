@@ -4500,7 +4500,7 @@ dependencies = [
 
 [[package]]
 name = "yread-lib"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "tauri",
  "tauri-build",

@@ -2820,6 +2820,7 @@ function generateArtCover() {
     // 获取当前选择的类型
     const activeType = document.querySelector('.cover-type-btn.active');
     const coverType = activeType ? activeType.dataset.coverType : 'knot';
+    const subtypeIdx = parseInt(document.getElementById('cover-subtype-select').value) || 0;
 
     // ---- 琼斯多项式种子生成 ----
     // 用书名种子生成伪琼斯多项式参数，决定纽结的交叉数、拧数等
@@ -2861,110 +2862,151 @@ function generateArtCover() {
     ctx.fillRect(0, 0, W, H);
 
     if (coverType === 'knot') {
-        // ---- 纽结类型：用琼斯多项式参数生成复杂纽结投影 ----
-        const knotType = jp.crossings % 10;
+        // ---- 纽结图集：复杂不对称形状 + 上下遮挡交叉关系 ----
+        const knotDefs = [
+            { name: 'Trefoil 3₁', fn: (t, v) => [Math.sin(t)+2*Math.sin(2*t)+v[0]*Math.cos(3*t), Math.cos(t)-2*Math.cos(2*t)+v[1]*Math.sin(2*t), -Math.sin(3*t)+v[2]*Math.cos(t)] },
+            { name: 'Figure-8 4₁', fn: (t, v) => [(2+Math.cos(2*t+v[0]))*Math.cos(3*t), (2+Math.cos(2*t+v[0]))*Math.sin(3*t), Math.sin(4*t)+2*Math.sin(2*t)+v[1]*Math.cos(3*t)] },
+            { name: 'Cinquefoil 5₁', fn: (t, v) => { const r=2+Math.cos(5*t+v[0]); return [r*Math.cos(2*t)+v[1]*0.3, r*Math.sin(2*t)+v[2]*0.3, Math.sin(5*t)]; } },
+            { name: 'Torus(3,4)', fn: (t, v) => { const R=2.5+v[0]*0.3,r=0.8+v[1]*0.15; return [(R+r*Math.cos(4*t))*Math.cos(3*t), (R+r*Math.cos(4*t))*Math.sin(3*t), r*Math.sin(4*t)+v[2]*0.3]; } },
+            { name: 'Torus(3,5)', fn: (t, v) => { const R=2.5+v[0]*0.3,r=0.7+v[1]*0.15; return [(R+r*Math.cos(5*t))*Math.cos(3*t+v[2]*0.5), (R+r*Math.cos(5*t))*Math.sin(3*t+v[2]*0.5), r*Math.sin(5*t)]; } },
+            { name: 'Torus(2,7)', fn: (t, v) => { const R=2.5+v[0]*0.3,r=0.6+v[1]*0.15; return [(R+r*Math.cos(7*t))*Math.cos(2*t), (R+r*Math.cos(7*t))*Math.sin(2*t), r*Math.sin(7*t)+v[2]*0.4]; } },
+            { name: 'Stevedore 6₂', fn: (t, v) => [3*Math.cos(2*t)*(1+(0.5+v[0]*0.15)*Math.cos(3*t)), 3*Math.sin(2*t)*(1+(0.5+v[0]*0.15)*Math.cos(3*t)), 2*Math.sin(3*t)+Math.sin(5*t)+v[1]*0.4] },
+            { name: 'Solomon 6₁', fn: (t, v) => { const r=2+0.8*Math.sin(3*t+v[0]); return [r*Math.cos(2*t)+0.5*Math.sin(5*t)+v[1]*0.3, r*Math.sin(2*t)+0.5*Math.cos(5*t)+v[2]*0.3, Math.sin(4*t)]; } },
+            { name: 'Knot 7₂', fn: (t, v) => { const r=2+0.5*Math.cos(4*t+v[0]); return [r*Math.cos(3*t)+0.3*Math.sin(6*t)+v[1]*0.3, r*Math.sin(3*t)+0.3*Math.cos(6*t)+v[2]*0.3, Math.sin(5*t)+0.4*Math.cos(3*t)]; } },
+            { name: 'Knot 8₃', fn: (t, v) => { const r=2+0.4*Math.cos(5*t+v[0]); return [r*Math.cos(3*t)+0.3*Math.sin(7*t)+v[1]*0.3, r*Math.sin(3*t)+0.3*Math.cos(7*t)+v[2]*0.3, Math.sin(6*t)+0.3*Math.cos(4*t)]; } },
+        ];
 
-        function knotPoint(t) {
-            let x, y;
-            const c0 = jp.coeffs[0], c1 = jp.coeffs[1], c2 = jp.coeffs[2];
-            if (knotType === 0 || knotType === 1) {
-                // 三叶结变体（Jones V(t) = t + t^3 - t^4）
-                const p = 2 + c0;
-                x = Math.sin(t) + p * Math.sin(2 * t);
-                y = Math.cos(t) - p * Math.cos(2 * t);
-            } else if (knotType === 2 || knotType === 3) {
-                // 八字结变体（Jones V(t) = t^2 - t + 2 - t^{-1} + t^{-2}）
-                x = (2 + Math.cos(2 * t + c1)) * Math.cos(3 * t);
-                y = (2 + Math.cos(2 * t + c1)) * Math.sin(3 * t);
-            } else if (knotType === 4 || knotType === 5) {
-                // Torus(p,q) 纽结 —— p,q 由琼斯多项式交叉数决定
-                const p = 2 + (jp.crossings % 3);
-                const q = 3 + (jp.writhe + jp.crossings) % 5;
-                const r = 2 + Math.cos(q * t / p);
-                x = r * Math.cos(t);
-                y = r * Math.sin(t);
-            } else if (knotType === 6 || knotType === 7) {
-                // Lissajous 纽结 —— 频率由琼斯多项式系数决定
-                const fx = 3 + Math.abs(Math.round(c0 * 3));
-                const fy = 4 + Math.abs(Math.round(c1 * 2));
-                const phase = c2 * Math.PI;
-                x = 3 * Math.sin(fx * t + phase);
-                y = 3 * Math.sin(fy * t);
-            } else {
-                // 玫瑰线纽结 —— k 由琼斯多项式分量数决定
-                const k = 2 + jp.numComponents * 0.5;
-                const R = 2.5 * Math.cos(k * t);
-                x = R * Math.cos(t);
-                y = R * Math.sin(t);
-            }
-            return [x, y];
+        const knotIdx = subtypeIdx % knotDefs.length;
+        const knot = knotDefs[knotIdx];
+
+        // 种子驱动的拓扑变化参数
+        const vary = [srandRange(-0.4, 0.4), srandRange(-0.4, 0.4), srandRange(-0.4, 0.4)];
+
+        // 种子驱动的 3D 旋转（每次生成不同视角）
+        const kRotX = srandRange(0.2, 0.9);
+        const kRotY = srandRange(0, Math.PI * 2);
+        function kRot3D(x, y, z) {
+            let x1 = x * Math.cos(kRotY) + z * Math.sin(kRotY);
+            let z1 = -x * Math.sin(kRotY) + z * Math.cos(kRotY);
+            let y1 = y * Math.cos(kRotX) - z1 * Math.sin(kRotX);
+            let z2 = y * Math.sin(kRotX) + z1 * Math.cos(kRotX);
+            return [x1, y1, z2];
         }
 
-        // logistic map 混沌参数
-        let c = (_seed % 1000) / 1000;
-        for (let i = 0; i < 50; i++) c = 3.9 * c * (1 - c);
-
-        const numStrands = jp.numComponents;
-        const scale = 55 + c * 35;
+        const knotScale = 48;
         const cx = W / 2, cy = H / 2 - 80;
+        const N = 500;
+        const gapLen = 7; // 擦除圆半径
 
-        for (let s = 0; s < numStrands; s++) {
-            const offset = s * 0.15;
-            const steps = 1500;
-            ctx.beginPath();
-            for (let i = 0; i <= steps; i++) {
-                const t = (i / steps) * Math.PI * 2 * 2 + offset;
-                const [kx, ky] = knotPoint(t + c * 0.5);
-                const px = cx + kx * scale;
-                const py = cy + ky * scale;
-                if (i === 0) ctx.moveTo(px, py);
-                else ctx.lineTo(px, py);
+        // 采样曲线点（含 z 坐标用于判断交叉上下关系）
+        const pts = [];
+        for (let i = 0; i < N; i++) {
+            const t = (i / N) * Math.PI * 2;
+            const [x, y, z] = knot.fn(t, vary);
+            const [rx, ry, rz] = kRot3D(x, y, z);
+            pts.push({ x: cx + rx * knotScale, y: cy + ry * knotScale, z: rz });
+        }
+
+        // 查找自交叉点（线段-线段相交检测）
+        const crossings = [];
+        for (let i = 0; i < N; i++) {
+            for (let j = i + 12; j < N; j++) {
+                if (Math.abs(i - j) < 8 || (i === 0 && j >= N - 8)) continue;
+                const a1 = pts[i], a2 = pts[(i + 1) % N];
+                const b1 = pts[j], b2 = pts[(j + 1) % N];
+                const dx1 = a2.x - a1.x, dy1 = a2.y - a1.y;
+                const dx2 = b2.x - b1.x, dy2 = b2.y - b1.y;
+                const denom = dx1 * dy2 - dy1 * dx2;
+                if (Math.abs(denom) < 0.001) continue;
+                const tt = ((b1.x - a1.x) * dy2 - (b1.y - a1.y) * dx2) / denom;
+                const ss = ((b1.x - a1.x) * dy1 - (b1.y - a1.y) * dx1) / denom;
+                if (tt > 0.05 && tt < 0.95 && ss > 0.05 && ss < 0.95) {
+                    const z1 = a1.z + tt * (a2.z - a1.z);
+                    const z2 = b1.z + ss * (b2.z - b1.z);
+                    crossings.push({
+                        seg1: i, seg2: j, t1: tt, t2: ss,
+                        x: a1.x + tt * dx1, y: a1.y + tt * dy1,
+                        over1: z1 > z2
+                    });
+                }
             }
-            ctx.closePath();
-            ctx.strokeStyle = palette.colors[s % palette.colors.length];
-            ctx.lineWidth = 4 - s * 0.8;
-            ctx.lineJoin = 'round';
-            ctx.lineCap = 'round';
-            ctx.globalAlpha = 1 - s * 0.15;
-            ctx.stroke();
-            ctx.globalAlpha = 1;
         }
 
-        // 交叉点装饰
-        const dotCount = 30 + srandInt(0, 40);
-        for (let i = 0; i < dotCount; i++) {
-            const dx = srandRange(20, W - 20);
-            const dy = srandRange(20, H - 120);
-            const dr = srandRange(1, 3);
+        // 第一遍：画完整曲线
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        pts.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+        ctx.closePath();
+        ctx.strokeStyle = palette.colors[0];
+        ctx.stroke();
+
+        // 第二遍：在每个交叉点擦除下方线段，再沿上方方向补回
+        crossings.forEach(c => {
+            const underSeg = c.over1 ? c.seg2 : c.seg1;
+            const underT = c.over1 ? c.t2 : c.t1;
+            const overSeg = c.over1 ? c.seg1 : c.seg2;
+
+            const u1 = pts[underSeg], u2 = pts[(underSeg + 1) % N];
+            const udx = u2.x - u1.x, udy = u2.y - u1.y;
+            const ulen = Math.hypot(udx, udy) || 1;
+            const ux = u1.x + udx * underT, uy = u1.y + udy * underT;
+
+            // 擦除：填充圆（背景色）
             ctx.beginPath();
-            ctx.arc(dx, dy, dr, 0, Math.PI * 2);
-            ctx.fillStyle = palette.colors[0] + Math.floor(srandRange(15, 50)).toString(16).padStart(2, '0');
+            ctx.arc(ux, uy, gapLen, 0, Math.PI * 2);
+            ctx.fillStyle = palette.bg;
             ctx.fill();
-        }
 
-        // 琼斯多项式标注
+            // 补回：沿上方方向画线段
+            const o1 = pts[overSeg], o2 = pts[(overSeg + 1) % N];
+            const odx = o2.x - o1.x, ody = o2.y - o1.y;
+            const olen = Math.hypot(odx, ody) || 1;
+            ctx.beginPath();
+            ctx.moveTo(ux - (odx / olen) * gapLen, uy - (ody / olen) * gapLen);
+            ctx.lineTo(ux + (odx / olen) * gapLen, uy + (ody / olen) * gapLen);
+            ctx.strokeStyle = palette.colors[0];
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        });
+
+        // 纽结名称标注
         ctx.fillStyle = palette.colors[0];
-        ctx.globalAlpha = 0.2;
+        ctx.globalAlpha = 0.3;
         ctx.font = '10px monospace';
         ctx.textAlign = 'left';
-        ctx.fillText(`V(t): crossings=${jp.crossings} w=${jp.writhe}`, 16, H - 108);
+        ctx.fillText(knot.name, 16, H - 108);
         ctx.globalAlpha = 1;
 
     } else if (coverType === 'topology') {
-        // ---- 拓扑类型：环面、克莱因瓶、莫比乌斯带投影 ----
-        const topoType = srandInt(0, 4);
+        // ---- 拓扑类型：3D 透视旋转 + 表面彩色曲线 ----
+        const topoType = subtypeIdx % 5;
+        const rotY = srandRange(0.3, 0.9);
+        const rotX = 0.55;
+
+        function rot3D(x, y, z) {
+            let x1 = x * Math.cos(rotY) + z * Math.sin(rotY);
+            let z1 = -x * Math.sin(rotY) + z * Math.cos(rotY);
+            let y1 = y * Math.cos(rotX) - z1 * Math.sin(rotX);
+            let z2 = y * Math.sin(rotX) + z1 * Math.cos(rotX);
+            return [x1, y1, z2];
+        }
+        function proj(x, y, z) {
+            const fov = 6, s = fov / (fov + z);
+            return [W / 2 + x * s * 55, H / 2 - 60 + y * s * 55];
+        }
 
         function topoPoint(u, v) {
             let x, y, z;
             if (topoType === 0) {
-                // 环面 T²
-                const R = 2, r = 0.8 + jp.coeffs[0] * 0.3;
+                const R = 2, r = 0.8;
                 x = (R + r * Math.cos(v)) * Math.cos(u);
                 y = (R + r * Math.cos(v)) * Math.sin(u);
                 z = r * Math.sin(v);
             } else if (topoType === 1) {
-                // 克莱因瓶投影
-                const a = 3, b = 1;
+                const a = 3;
                 const cu = Math.cos(u), su = Math.sin(u);
                 const cv = Math.cos(v), sv = Math.sin(v);
                 if (u < Math.PI) {
@@ -2977,24 +3019,20 @@ function generateArtCover() {
                     z = cv * Math.cos(u / 2);
                 }
             } else if (topoType === 2) {
-                // 莫比乌斯带
-                const a = 2;
-                const half = v / 2;
+                const a = 2, half = v / 2;
                 x = (a + u * Math.cos(half)) * Math.cos(v);
                 y = (a + u * Math.cos(half)) * Math.sin(v);
                 z = u * Math.sin(half);
             } else if (topoType === 3) {
-                // 球极投影的纽结
-                const theta = u, phi = v;
-                x = Math.sin(phi) * Math.cos(theta);
-                y = Math.sin(phi) * Math.sin(theta);
-                z = Math.cos(phi);
-                // 球极投影到平面
-                const denom = 1 - z + 0.01;
-                x = x / denom;
-                y = y / denom;
+                // 卡拉比-丘流形（五次超曲面投影近似）
+                const cu = Math.cos(u), su = Math.sin(u);
+                const cv = Math.cos(v), sv = Math.sin(v);
+                const r = 1.8 + 0.6 * Math.cos(3 * u) * Math.cos(2 * v);
+                x = r * cu * (1 + 0.3 * Math.cos(5 * v));
+                y = r * su * (1 + 0.3 * Math.sin(5 * u));
+                z = r * 0.8 * sv * Math.cos(3 * u + 2 * v);
             } else {
-                // Boy 曲面（射影平面嵌入）
+                // Boy 曲面
                 const a = 0.5;
                 x = Math.cos(u) * (a + Math.cos(v / 2) * Math.sin(u) - Math.sin(v / 2) * Math.sin(2 * u) / 2);
                 y = Math.sin(u) * (a + Math.cos(v / 2) * Math.sin(u) - Math.sin(v / 2) * Math.sin(2 * u) / 2);
@@ -3003,53 +3041,80 @@ function generateArtCover() {
             return [x, y, z];
         }
 
-        const scale = 70;
-        const cx = W / 2, cy = H / 2 - 60;
-        const uSteps = 60, vSteps = 40;
+        const uSteps = 50, vSteps = 30;
 
-        // 绘制网格线
-        const lineAlpha = 0.6;
+        // 绘制 3D 网格线（带透视）
         ctx.lineWidth = 1.2;
         ctx.lineJoin = 'round';
-
-        // u 方向线条
-        for (let i = 0; i <= uSteps; i += 3) {
+        for (let i = 0; i <= uSteps; i += 2) {
             const u = (i / uSteps) * Math.PI * 2;
             ctx.beginPath();
             ctx.strokeStyle = palette.colors[i % palette.colors.length];
-            ctx.globalAlpha = lineAlpha;
+            ctx.globalAlpha = 0.5;
             for (let j = 0; j <= vSteps; j++) {
                 const v = (j / vSteps) * Math.PI * 2;
-                const [x, , z] = topoPoint(u, v);
-                const px = cx + x * scale;
-                const py = cy + z * scale;
-                if (j === 0) ctx.moveTo(px, py);
-                else ctx.lineTo(px, py);
+                const [x, y, z] = topoPoint(u, v);
+                const [rx, ry, rz] = rot3D(x, y, z);
+                const [px, py] = proj(rx, ry, rz);
+                if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
             }
             ctx.stroke();
         }
-        // v 方向线条
-        for (let j = 0; j <= vSteps; j += 3) {
+        for (let j = 0; j <= vSteps; j += 2) {
             const v = (j / vSteps) * Math.PI * 2;
             ctx.beginPath();
             ctx.strokeStyle = palette.colors[(j + 1) % palette.colors.length];
-            ctx.globalAlpha = lineAlpha;
+            ctx.globalAlpha = 0.5;
             for (let i = 0; i <= uSteps; i++) {
                 const u = (i / uSteps) * Math.PI * 2;
-                const [x, , z] = topoPoint(u, v);
-                const px = cx + x * scale;
-                const py = cy + z * scale;
-                if (i === 0) ctx.moveTo(px, py);
-                else ctx.lineTo(px, py);
+                const [x, y, z] = topoPoint(u, v);
+                const [rx, ry, rz] = rot3D(x, y, z);
+                const [px, py] = proj(rx, ry, rz);
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
             }
             ctx.stroke();
         }
         ctx.globalAlpha = 1;
 
+        // 环面上绘制经线 + 纬线彩色曲线
+        if (topoType === 0) {
+            const R = 2, r = 0.8;
+            // 经线（固定 u）
+            const mu = srandRange(0, Math.PI * 2);
+            ctx.beginPath();
+            ctx.strokeStyle = '#ff6b6b';
+            ctx.lineWidth = 2.5;
+            for (let j = 0; j <= vSteps; j++) {
+                const v = (j / vSteps) * Math.PI * 2;
+                const x = (R + r * Math.cos(v)) * Math.cos(mu);
+                const y = (R + r * Math.cos(v)) * Math.sin(mu);
+                const z = r * Math.sin(v);
+                const [rx, ry, rz] = rot3D(x, y, z);
+                const [px, py] = proj(rx, ry, rz);
+                if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+            // 纬线（固定 v）
+            const mv = srandRange(0, Math.PI * 2);
+            ctx.beginPath();
+            ctx.strokeStyle = '#4ecdc4';
+            ctx.lineWidth = 2.5;
+            for (let i = 0; i <= uSteps; i++) {
+                const u = (i / uSteps) * Math.PI * 2;
+                const x = (R + r * Math.cos(mv)) * Math.cos(u);
+                const y = (R + r * Math.cos(mv)) * Math.sin(u);
+                const z = r * Math.sin(mv);
+                const [rx, ry, rz] = rot3D(x, y, z);
+                const [px, py] = proj(rx, ry, rz);
+                if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+        }
+
         // 拓扑标注
-        const topoNames = ['Torus T²', 'Klein Bottle', 'Möbius Strip', 'Stereographic', 'Boy Surface'];
+        const topoNames = ['Torus T²', 'Klein Bottle', 'Möbius Strip', 'Calabi-Yau', 'Boy Surface'];
         ctx.fillStyle = palette.colors[0];
-        ctx.globalAlpha = 0.2;
+        ctx.globalAlpha = 0.3;
         ctx.font = '10px monospace';
         ctx.textAlign = 'left';
         ctx.fillText(topoNames[topoType], 16, H - 108);
@@ -3057,7 +3122,7 @@ function generateArtCover() {
 
     } else {
         // ---- 几何类型：分形、螺旋、对称图案 ----
-        const geoType = srandInt(0, 4);
+        const geoType = subtypeIdx % 5;
 
         if (geoType === 0) {
             // 分形树
@@ -3267,8 +3332,8 @@ function renderDashboard() {
         responsive: true,
         plugins: { legend: { display: false } },
         scales: {
-            x: { ticks: { color: '#71717a' }, grid: { color: 'rgba(255,255,255,0.03)' } },
-            y: { ticks: { color: '#71717a' }, grid: { color: 'rgba(255,255,255,0.03)' } }
+            x: { ticks: { color: '#a1a1aa', font: { size: 12 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
+            y: { ticks: { color: '#a1a1aa', font: { size: 12 } }, grid: { color: 'rgba(255,255,255,0.03)' } }
         }
     };
     const doughnutOpts = (legend) => ({
@@ -3356,8 +3421,12 @@ function renderDashboard() {
     renderItemList('per-paper-stats', sortedPapers);
 
     // ---- 热力图 ----
+    initHeatmapToggle();
     renderHeatmap();
     setupHeatmapTooltip();
+
+    // ---- 阅读时段直方图 ----
+    renderTimePeriodHistogram();
 
     // ---- 知识图谱分析 ----
     renderGraphAnalysis();
@@ -3551,9 +3620,38 @@ function renderGraphAnalysis() {
 }
 
 // ============================================================
-//  阅读热力图（GitHub 风格，按日期，月份横轴）
+//  阅读热力图 + 时段分布
 // ============================================================
-let heatmapCells = []; // 供 tooltip 使用 [{x,y,w,h,date,duration,count}]
+let heatmapCells = [];
+let heatmapView = 'week'; // 'week' | 'month' | 'year'
+let timePeriodChart = null;
+
+function initHeatmapToggle() {
+    const group = document.getElementById('heatmap-toggle');
+    if (!group) return;
+    const btns = group.querySelectorAll('.toggle-btn');
+    const slider = group.querySelector('.toggle-slider');
+
+    function updateSlider() {
+        const active = group.querySelector('.toggle-btn.active');
+        if (!active || !slider) return;
+        slider.style.left = active.offsetLeft + 'px';
+        slider.style.width = active.offsetWidth + 'px';
+    }
+    updateSlider();
+    // 延迟一帧确保布局完成
+    requestAnimationFrame(updateSlider);
+
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            btns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            heatmapView = btn.dataset.view;
+            updateSlider();
+            renderHeatmap();
+        });
+    });
+}
 
 function renderHeatmap() {
     const canvas = document.getElementById('chart-heatmap');
@@ -3561,9 +3659,10 @@ function renderHeatmap() {
     const ctx = canvas.getContext('2d');
     heatmapCells = [];
     const accentRGB = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() || '129,140,248';
+    const isLight = document.body.classList.contains('light-theme');
 
     // 按日期聚合
-    const dayMap = {}; // 'YYYY-MM-DD' → { duration, count }
+    const dayMap = {};
     readingStats.forEach(r => {
         const key = r.date;
         if (!dayMap[key]) dayMap[key] = { duration: 0, count: 0 };
@@ -3571,129 +3670,214 @@ function renderHeatmap() {
         dayMap[key].count += 1;
     });
 
-    // 找最大值
-    let maxVal = 0;
-    Object.values(dayMap).forEach(v => { if (v.duration > maxVal) maxVal = v.duration; });
-    if (maxVal === 0) maxVal = 1;
-
-    // 生成日期范围：过去 53 周，从最近的周日往回，补到本周六（含未来几天）
-    const today = new Date();
-    const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endDow = endDate.getDay(); // 0=Sun
-    const gridEnd = new Date(endDate);
-    gridEnd.setDate(gridEnd.getDate() + (6 - endDow)); // 补到本周六
-    // 往回 53 周
-    const gridStart = new Date(gridEnd);
-    gridStart.setDate(gridStart.getDate() - 53 * 7 - 6);
-
-    // 绘制参数
     const cellSize = 13, gap = 3;
     const labelW = 32, labelH = 22;
-    const totalWeeks = Math.ceil((gridEnd - gridStart) / (7 * 86400000)) + 1;
-    const W = labelW + totalWeeks * (cellSize + gap) + 12;
-    const H = labelH + 7 * (cellSize + gap) + 28;
-    canvas.width = W;
-    canvas.height = H;
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-    canvas.style.maxWidth = 'none';
 
-    const isLight = document.body.classList.contains('light-theme');
-    ctx.clearRect(0, 0, W, H);
-
-    // 星期标签（一、三、五）
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.textAlign = 'right';
-    ctx.fillStyle = isLight ? '#71717a' : '#52525b';
-    const dayLabels = ['', '一', '', '三', '', '五', ''];
-    for (let d = 0; d < 7; d++) {
-        if (dayLabels[d]) {
-            ctx.fillText(dayLabels[d], labelW - 4, labelH + d * (cellSize + gap) + cellSize - 2);
-        }
-    }
-
-    // 月份标签 + 单元格
-    let lastMonth = -1;
-    ctx.textAlign = 'center';
-    const cur = new Date(gridStart);
-    while (cur <= gridEnd) {
-        const dow = cur.getDay(); // 0=Sun
-        const weekIdx = Math.floor((cur - gridStart) / (7 * 86400000));
-        const x = labelW + weekIdx * (cellSize + gap);
-        const y = labelH + dow * (cellSize + gap);
-
-        // 月份标签
-        const m = cur.getMonth();
-        if (m !== lastMonth && dow === 0) {
-            const monthNames = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
-            ctx.fillStyle = isLight ? '#71717a' : '#52525b';
-            ctx.fillText(monthNames[m], x + cellSize / 2, labelH - 6);
-            lastMonth = m;
-        }
-
-        // 日期 key
-        const dateKey = localDateStr(cur);
-        const val = dayMap[dateKey] || { duration: 0, count: 0 };
-
-        // 画方块
-        const r = 2;
+    function drawRoundedRect(x, y, w, h, r) {
         ctx.beginPath();
         ctx.moveTo(x + r, y);
-        ctx.lineTo(x + cellSize - r, y);
-        ctx.arcTo(x + cellSize, y, x + cellSize, y + r, r);
-        ctx.lineTo(x + cellSize, y + cellSize - r);
-        ctx.arcTo(x + cellSize, y + cellSize, x + cellSize - r, y + cellSize, r);
-        ctx.lineTo(x + r, y + cellSize);
-        ctx.arcTo(x, y + cellSize, x, y + cellSize - r, r);
-        ctx.lineTo(x, y + r);
-        ctx.arcTo(x, y, x + r, y, r);
+        ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
+        ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+        ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
+        ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r);
         ctx.closePath();
+    }
 
-        if (cur > endDate) {
-            // 未来的日期：虚线边框
-            ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([3, 2]);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.fillStyle = 'transparent';
-        } else if (val.duration === 0) {
-            ctx.fillStyle = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
-        } else {
-            const t = Math.min(val.duration / maxVal, 1);
-            const alpha = 0.2 + t * 0.8;
-            ctx.fillStyle = `rgba(${accentRGB},${alpha})`;
-        }
-        ctx.fill();
+    function cellColor(val, maxVal) {
+        if (val === 0) return isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
+        const t = Math.min(val / maxVal, 1);
+        return `rgba(${accentRGB},${0.2 + t * 0.8})`;
+    }
 
-        // 记录单元格信息（tooltip 用）
-        heatmapCells.push({
-            x, y, w: cellSize, h: cellSize,
-            date: dateKey,
-            duration: val.duration,
-            count: val.count,
-            future: cur > endDate
+    const today = new Date();
+    const endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (heatmapView === 'week') {
+        // ---- 周视图：过去 53 周 GitHub 风格 ----
+        const endDow = endDate.getDay();
+        const gridEnd = new Date(endDate);
+        gridEnd.setDate(gridEnd.getDate() + (6 - endDow));
+        const gridStart = new Date(gridEnd);
+        gridStart.setDate(gridStart.getDate() - 53 * 7 - 6);
+
+        let maxVal = 0;
+        Object.values(dayMap).forEach(v => { if (v.duration > maxVal) maxVal = v.duration; });
+        if (maxVal === 0) maxVal = 1;
+
+        const totalWeeks = Math.ceil((gridEnd - gridStart) / (7 * 86400000)) + 1;
+        const W = labelW + totalWeeks * (cellSize + gap) + 12;
+        const H = labelH + 7 * (cellSize + gap) + 28;
+        canvas.width = W; canvas.height = H;
+        canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; canvas.style.maxWidth = 'none';
+        ctx.clearRect(0, 0, W, H);
+
+        // 星期标签
+        ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'right';
+        ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+        ['', '一', '', '三', '', '五', ''].forEach((l, d) => {
+            if (l) ctx.fillText(l, labelW - 4, labelH + d * (cellSize + gap) + cellSize - 2);
         });
 
-        cur.setDate(cur.getDate() + 1);
-    }
+        let lastMonth = -1;
+        ctx.textAlign = 'center';
+        const cur = new Date(gridStart);
+        while (cur <= gridEnd) {
+            const dow = cur.getDay();
+            const weekIdx = Math.floor((cur - gridStart) / (7 * 86400000));
+            const x = labelW + weekIdx * (cellSize + gap);
+            const y = labelH + dow * (cellSize + gap);
+            const m = cur.getMonth();
+            if (m !== lastMonth && dow === 0) {
+                const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+                ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+                ctx.fillText(monthNames[m], x + cellSize / 2, labelH - 6);
+                lastMonth = m;
+            }
+            const dateKey = localDateStr(cur);
+            const val = dayMap[dateKey] || { duration: 0, count: 0 };
+            drawRoundedRect(x, y, cellSize, cellSize, 2);
+            if (cur > endDate) {
+                ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
+                ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
+                ctx.fillStyle = 'transparent';
+            } else {
+                ctx.fillStyle = cellColor(val.duration, maxVal);
+            }
+            ctx.fill();
+            heatmapCells.push({ x, y, w: cellSize, h: cellSize, date: dateKey, duration: val.duration, count: val.count, future: cur > endDate });
+            cur.setDate(cur.getDate() + 1);
+        }
+        // 图例
+        const legendY = labelH + 7 * (cellSize + gap) + 4;
+        ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left';
+        ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+        ctx.fillText('少', labelW, legendY + 9);
+        for (let i = 0; i < 5; i++) {
+            ctx.beginPath(); ctx.roundRect(labelW + 18 + i * (cellSize + gap), legendY, cellSize, cellSize, 2);
+            ctx.fillStyle = i === 0 ? `rgba(${accentRGB},0.15)` : `rgba(${accentRGB},${0.2 + (i / 4) * 0.8})`;
+            ctx.fill();
+        }
+        ctx.fillStyle = isLight ? '#71717a' : '#52525b';
+        ctx.fillText('多', labelW + 18 + 5 * (cellSize + gap) + 2, legendY + 9);
 
-    // 底部图例
-    const legendY = labelH + 7 * (cellSize + gap) + 4;
-    ctx.font = '9px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = isLight ? '#71717a' : '#52525b';
-    ctx.fillText('少', labelW, legendY + 9);
-    for (let i = 0; i < 5; i++) {
-        const lx = labelW + 18 + i * (cellSize + gap);
-        ctx.beginPath();
-        ctx.roundRect(lx, legendY, cellSize, cellSize, 2);
-        const alpha = i === 0 ? 0.15 : 0.2 + (i / 4) * 0.8;
-        ctx.fillStyle = `rgba(${accentRGB},${alpha})`;
-        ctx.fill();
+    } else if (heatmapView === 'month') {
+        // ---- 月视图：当年 12 个月 × 31 天 ----
+        const year = today.getFullYear();
+        let maxVal = 0;
+        for (let m = 0; m < 12; m++) {
+            const daysInMonth = new Date(year, m + 1, 0).getDate();
+            for (let d = 1; d <= daysInMonth; d++) {
+                const key = `${year}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const v = dayMap[key]; if (v && v.duration > maxVal) maxVal = v.duration;
+            }
+        }
+        if (maxVal === 0) maxVal = 1;
+
+        const cols = 12, rows = 31;
+        const mCellSize = 20, mGap = 4;
+        const W = labelW + cols * (mCellSize + mGap) + 12;
+        const H = labelH + rows * (mCellSize + mGap) + 28;
+        canvas.width = W; canvas.height = H;
+        canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; canvas.style.maxWidth = 'none';
+        ctx.clearRect(0, 0, W, H);
+
+        const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+        ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
+        for (let m = 0; m < 12; m++) {
+            ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+            ctx.fillText(monthNames[m], labelW + m * (mCellSize + mGap) + mCellSize / 2, labelH - 6);
+        }
+        // 日期标签
+        ctx.textAlign = 'right';
+        for (let d = 0; d < 31; d++) {
+            if ((d + 1) % 5 === 1 || d === 30) {
+                ctx.fillText(String(d + 1), labelW - 4, labelH + d * (mCellSize + mGap) + mCellSize - 2);
+            }
+        }
+        for (let m = 0; m < 12; m++) {
+            const daysInMonth = new Date(year, m + 1, 0).getDate();
+            for (let d = 0; d < 31; d++) {
+                const x = labelW + m * (mCellSize + mGap);
+                const y = labelH + d * (mCellSize + mGap);
+                if (d < daysInMonth) {
+                    const key = `${year}-${String(m + 1).padStart(2, '0')}-${String(d + 1).padStart(2, '0')}`;
+                    const val = dayMap[key] || { duration: 0, count: 0 };
+                    const isFuture = new Date(year, m, d + 1) > endDate;
+                    drawRoundedRect(x, y, mCellSize, mCellSize, 2);
+                    if (isFuture) {
+                        ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
+                        ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
+                        ctx.fillStyle = 'transparent';
+                    } else {
+                        ctx.fillStyle = cellColor(val.duration, maxVal);
+                    }
+                    ctx.fill();
+                    heatmapCells.push({ x, y, w: mCellSize, h: mCellSize, date: key, duration: val.duration, count: val.count, future: isFuture });
+                } else {
+                    drawRoundedRect(x, y, mCellSize, mCellSize, 2);
+                    ctx.fillStyle = 'transparent'; ctx.fill();
+                }
+            }
+        }
+
+    } else {
+        // ---- 年视图：过去 5 年 × 12 月，按月聚合 ----
+        const year = today.getFullYear();
+        let maxVal = 0;
+        const monthData = {};
+        for (let y = year - 4; y <= year; y++) {
+            for (let m = 0; m < 12; m++) {
+                const mk = `${y}-${String(m + 1).padStart(2, '0')}`;
+                let total = 0;
+                Object.keys(dayMap).forEach(k => { if (k.startsWith(mk)) total += dayMap[k].duration; });
+                monthData[mk] = total;
+                if (total > maxVal) maxVal = total;
+            }
+        }
+        if (maxVal === 0) maxVal = 1;
+
+        const cols = 5, rows = 12;
+        const cellSz = 28, gap2 = 6;
+        const W = labelW + cols * (cellSz + gap2) + 12;
+        const H = labelH + rows * (cellSz + gap2) + 28;
+        canvas.width = W; canvas.height = H;
+        canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; canvas.style.maxWidth = 'none';
+        ctx.clearRect(0, 0, W, H);
+
+        const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+        // 年份标签
+        ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
+        for (let i = 0; i < 5; i++) {
+            ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+            ctx.fillText(String(year - 4 + i), labelW + i * (cellSz + gap2) + cellSz / 2, labelH - 6);
+        }
+        // 月份标签
+        ctx.textAlign = 'right';
+        for (let m = 0; m < 12; m++) {
+            ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+            ctx.fillText(monthNames[m], labelW - 4, labelH + m * (cellSz + gap2) + cellSz - 3);
+        }
+        for (let i = 0; i < 5; i++) {
+            const y = year - 4 + i;
+            for (let m = 0; m < 12; m++) {
+                const x = labelW + i * (cellSz + gap2);
+                const yy = labelH + m * (cellSz + gap2);
+                const mk = `${y}-${String(m + 1).padStart(2, '0')}`;
+                const val = monthData[mk] || 0;
+                const isFuture = new Date(y, m + 1, 0) > endDate;
+                drawRoundedRect(x, yy, cellSz, cellSz, 3);
+                if (isFuture) {
+                    ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
+                    ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
+                    ctx.fillStyle = 'transparent';
+                } else {
+                    ctx.fillStyle = cellColor(val, maxVal);
+                }
+                ctx.fill();
+                heatmapCells.push({ x, y: yy, w: cellSz, h: cellSz, date: mk, duration: val, count: 0, future: isFuture });
+            }
+        }
     }
-    ctx.fillStyle = isLight ? '#71717a' : '#52525b';
-    ctx.fillText('多', labelW + 18 + 5 * (cellSize + gap) + 2, legendY + 9);
 }
 
 function setupHeatmapTooltip() {
@@ -3747,6 +3931,74 @@ function setupHeatmapTooltip() {
     canvas.addEventListener('mouseleave', () => {
         tooltip.style.display = 'none';
     });
+}
+
+// ---- 阅读时段直方图 ----
+function renderTimePeriodHistogram() {
+    const canvas = document.getElementById('chart-time-period');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const accentRGB = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() || '129,140,248';
+    const isLight = document.body.classList.contains('light-theme');
+
+    // 按小时聚合
+    const hourMap = new Array(24).fill(0);
+    readingStats.forEach(r => {
+        const h = r.hour !== undefined ? r.hour : (r.timestamp ? new Date(r.timestamp).getHours() : 12);
+        hourMap[h] += r.duration;
+    });
+
+    let maxVal = Math.max(...hourMap);
+    if (maxVal === 0) maxVal = 1;
+
+    const W = canvas.parentElement.clientWidth - 48;
+    const H = 160;
+    canvas.width = W; canvas.height = H;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.clearRect(0, 0, W, H);
+
+    const barW = Math.max(6, (W - 60) / 24 - 2);
+    const chartLeft = 40, chartTop = 10, chartH = H - 36;
+
+    // Y 轴网格线
+    ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = chartTop + (chartH / 4) * i;
+        ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+
+    // Y 轴标签
+    ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'right';
+    ctx.fillStyle = isLight ? '#3f3f46' : '#d4d4d8';
+    for (let i = 0; i <= 4; i++) {
+        const v = Math.round(maxVal * (4 - i) / 4);
+        const label = v >= 60 ? (v / 60).toFixed(0) + 'h' : v + 'm';
+        ctx.fillText(label, chartLeft - 4, chartTop + (chartH / 4) * i + 3);
+    }
+
+    // 柱状图
+    for (let h = 0; h < 24; h++) {
+        const x = chartLeft + h * ((W - chartLeft) / 24) + 1;
+        const barH = (hourMap[h] / maxVal) * chartH;
+        const y = chartTop + chartH - barH;
+
+        // 渐变色柱
+        const grad = ctx.createLinearGradient(x, y, x, chartTop + chartH);
+        grad.addColorStop(0, `rgba(${accentRGB},0.85)`);
+        grad.addColorStop(1, `rgba(${accentRGB},0.35)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW, barH, [3, 3, 0, 0]);
+        ctx.fill();
+
+        // X 轴标签
+        if (h % 3 === 0) {
+            ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
+            ctx.fillStyle = isLight ? '#3f3f46' : '#d4d4d8';
+            ctx.fillText(String(h).padStart(2, '0'), x + barW / 2, H - 6);
+        }
+    }
 }
 
 // ============================================================
@@ -4507,9 +4759,23 @@ function bindEvents() {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.cover-type-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
+            populateCoverSubtypes(btn.dataset.coverType);
             generateArtCover();
         });
     });
+
+    // 封面子类型图集
+    const coverSubtypes = {
+        knot: ['Trefoil 3₁', 'Figure-8 4₁', 'Cinquefoil 5₁', 'Torus(3,4)', 'Torus(3,5)', 'Torus(2,7)', 'Stevedore 6₂', 'Solomon 6₁', 'Knot 7₂', 'Knot 8₃'],
+        topology: ['Torus T²', 'Klein Bottle', 'Möbius Strip', 'Calabi-Yau', 'Boy Surface'],
+        geometry: ['分形树', '阿基米德螺旋', '彭罗斯镶嵌', '谢尔宾斯基', '李萨如图形'],
+    };
+    function populateCoverSubtypes(type) {
+        const sel = document.getElementById('cover-subtype-select');
+        const list = coverSubtypes[type] || [];
+        sel.innerHTML = list.map((name, i) => `<option value="${i}">${name}</option>`).join('');
+    }
+    populateCoverSubtypes('knot');
 
     // 阅读器
     document.getElementById('btn-close-reader').addEventListener('click', closeReader);
@@ -4622,6 +4888,13 @@ function bindEvents() {
 
     // ---- 独立笔记页 ----
     document.getElementById('btn-new-note').addEventListener('click', createNewNote);
+    document.getElementById('btn-import-notes').addEventListener('click', () => {
+        document.getElementById('note-file-input').click();
+    });
+    document.getElementById('note-file-input').addEventListener('change', (e) => {
+        if (e.target.files.length > 0) importObsidianNotes(e.target.files);
+        e.target.value = '';
+    });
     document.getElementById('btn-open-graph').addEventListener('click', openGraph);
     document.getElementById('btn-close-note-editor').addEventListener('click', closeNoteEditor);
     document.getElementById('note-editor-overlay').addEventListener('click', (e) => {
@@ -4745,6 +5018,98 @@ function renderNotesPage() {
         card.addEventListener('click', () => openNoteEditor(card.dataset.id));
     });
     lucide.createIcons();
+}
+
+// ============================================================
+//  Obsidian Markdown 解析器
+// ============================================================
+function parseObsidianMarkdown(md) {
+    let content = md;
+
+    // 1. 去除 YAML frontmatter
+    content = content.replace(/^---\n[\s\S]*?\n---\n/, '');
+
+    // 2. 转换 admonition 块 (```ad-type ... ```)
+    const adTypes = { 'ad-note': 'note', 'ad-tip': 'tip', 'ad-important': 'important', 'ad-example': 'example', 'ad-info': 'info' };
+    const adColors = { note: '#448aff', tip: '#00bfa5', important: '#ff6d00', example: '#aa00ff', info: '#2979ff' };
+    content = content.replace(/```ad-(\w+)\ntitle:\s*(.*?)\n([\s\S]*?)```/g, (_, type, title, body) => {
+        const cls = adTypes['ad-' + type] || 'note';
+        const color = adColors[cls] || '#448aff';
+        return `<div class="admonition admonition-${cls}" style="border-left:4px solid ${color};background:${color}11;padding:12px 16px;margin:12px 0;border-radius:0 8px 8px 0;"><div style="font-weight:700;margin-bottom:6px;color:${color};">${escHtml(title)}</div><div>${body.trim()}</div></div>`;
+    });
+
+    // 3. Wikilinks [[note]] → <a class="wikilink" data-link="note">note</a>
+    content = content.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '<a class="wikilink" data-link="$1">$2</a>');
+    content = content.replace(/\[\[([^\]]+)\]\]/g, '<a class="wikilink" data-link="$1">$1</a>');
+
+    // 4. 嵌入图片 ![[file.png|width]] → <img>
+    content = content.replace(/!\[\[([^\]|]+\.(png|jpg|jpeg|gif|svg|webp))\|?(\d*)\]\]/gi, (_, file, ext, w) => {
+        const size = w ? ` style="width:${w}px"` : '';
+        return `<img src="${file}" alt="${file}"${size} class="note-embedded-img">`;
+    });
+
+    // 5. 其他嵌入 ![[file.pdf]] → 占位
+    content = content.replace(/!\[\[([^\]]+\.(pdf))\]\]/gi, (_, file) => {
+        return `<div class="note-embedded-file">📎 ${escHtml(file)}</div>`;
+    });
+
+    // 6. 去除 inline metadata (key:: value)
+    content = content.replace(/\s*\(\w+::\s*[^)]*\)/g, '');
+
+    // 7. Templater 代码块 → 普通代码块
+    content = content.replace(/```js\s+\/\/templater/g, '```javascript');
+
+    // 8. TikZ 块 → 标记为代码
+    content = content.replace(/```tikz/g, '```latex');
+
+    // 9. 提取 [[links]] 用于笔记双链
+    const links = [];
+    const linkRe = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+    let m;
+    while ((m = linkRe.exec(md)) !== null) {
+        if (!links.includes(m[1])) links.push(m[1]);
+    }
+
+    return { content, links };
+}
+
+function importObsidianNotes(files) {
+    const readers = [];
+    for (const file of files) {
+        readers.push(new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ name: file.name.replace(/\.md$/i, ''), text: reader.result });
+            reader.onerror = () => resolve(null);
+            reader.readAsText(file);
+        }));
+    }
+    Promise.all(readers).then(results => {
+        let count = 0;
+        results.filter(Boolean).forEach(({ name, text }) => {
+            const { content, links } = parseObsidianMarkdown(text);
+            // 去重：同名笔记跳过
+            if (standaloneNotes.some(n => n.title === name)) return;
+            const note = {
+                id: 'note_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+                title: name,
+                content,
+                drawing: null,
+                links,
+                color: '',
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            };
+            standaloneNotes.push(note);
+            count++;
+        });
+        if (count > 0) {
+            saveStandaloneNotes();
+            renderNotesPage();
+            alert(`成功导入 ${count} 篇笔记`);
+        } else {
+            alert('没有可导入的笔记（可能已存在同名笔记）');
+        }
+    });
 }
 
 // ============================================================
