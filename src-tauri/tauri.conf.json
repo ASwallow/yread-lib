@@ -1,7 +1,7 @@
 {
     "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/main/nicegui/static/tauri/v2.json",
     "productName": "yread Lib",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "identifier": "com.lumina.library",
     "build": {
         "frontendDist": "../dist"

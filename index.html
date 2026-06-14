@@ -211,6 +211,35 @@
             <h2 class="section-title">设置</h2>
             <div class="settings-section">
                 <h3><i data-lucide="palette"></i> 外观</h3>
+                <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:12px;">
+                    <label>界面风格</label>
+                    <div class="style-picker" id="style-picker">
+                        <div class="style-card" data-style="glass">
+                            <div class="style-card-preview style-preview-glass"></div>
+                            <span class="style-card-label">液态玻璃</span>
+                        </div>
+                        <div class="style-card" data-style="comic">
+                            <div class="style-card-preview style-preview-comic"></div>
+                            <span class="style-card-label">漫画风</span>
+                        </div>
+                        <div class="style-card" data-style="metal">
+                            <div class="style-card-preview style-preview-metal"></div>
+                            <span class="style-card-label">金属工业</span>
+                        </div>
+                        <div class="style-card" data-style="cyber">
+                            <div class="style-card-preview style-preview-cyber"></div>
+                            <span class="style-card-label">赛博光污染</span>
+                        </div>
+                        <div class="style-card" data-style="steampunk">
+                            <div class="style-card-preview style-preview-steampunk"></div>
+                            <span class="style-card-label">蒸汽朋克</span>
+                        </div>
+                        <div class="style-card" data-style="inkwash">
+                            <div class="style-card-preview style-preview-inkwash"></div>
+                            <span class="style-card-label">水墨风</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="settings-row">
                     <label>彭罗斯底纹透明度</label>
                     <input type="range" id="penrose-opacity-slider" min="0" max="50" step="1" value="7">
@@ -595,8 +624,8 @@
         <button class="fab fab-tr" id="fab-calc" title="计算器">
             <i data-lucide="calculator"></i>
         </button>
-        <button class="fab fab-bl" id="fab-empty1" title="待定">
-            <i data-lucide="plus"></i>
+        <button class="fab fab-bl" id="fab-glossary" title="名词对照">
+            <i data-lucide="book-open-text"></i>
         </button>
         <button class="fab fab-br" id="fab-empty2" title="待定">
             <i data-lucide="plus"></i>
@@ -714,6 +743,28 @@
             <button class="calc-btn num" data-val=".">.</button>
             <button class="calc-btn eq" data-val="=">=</button>
         </div>
+    </div>
+
+    <!-- 名词定义对照面板 -->
+    <div class="glossary-panel" id="glossary-panel">
+        <div class="glossary-header">
+            <span class="glossary-title">名词对照</span>
+            <button class="btn-icon" id="btn-close-glossary"><i data-lucide="x"></i></button>
+        </div>
+        <div class="glossary-toolbar">
+            <input class="glossary-search" id="glossary-search" type="text" placeholder="搜索名词..." autocomplete="off" spellcheck="false">
+            <button class="glossary-add-btn" id="glossary-add-btn" title="添加名词"><i data-lucide="plus"></i></button>
+        </div>
+        <div class="glossary-form hidden" id="glossary-form">
+            <input class="glossary-input" id="glossary-term-input" type="text" placeholder="名词" autocomplete="off" spellcheck="false">
+            <textarea class="glossary-input glossary-def" id="glossary-def-input" placeholder="定义（支持 Markdown / $LaTeX$）..." rows="3"></textarea>
+            <div class="glossary-preview" id="glossary-preview"></div>
+            <div class="glossary-form-actions">
+                <button class="glossary-save-btn" id="glossary-save-btn">保存</button>
+                <button class="glossary-cancel-btn" id="glossary-cancel-btn">取消</button>
+            </div>
+        </div>
+        <div class="glossary-list" id="glossary-list"></div>
     </div>
 
     <!-- 导入进度提示 -->

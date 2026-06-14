@@ -71,17 +71,23 @@ scrollObserver  // IntersectionObserver 实例
 
 所有第三方库直接以 `<script>` 引入 `lib/` 目录下的 min 文件，无 npm/webpack/vite。修改 `app.js` 后直接生效（dev 模式下）。
 
-## 发布流程（每次 git push 前必做）
+## 发布流程
 
-1. **更新 README.md** — 在 `## 更新日志` 下新增本次修改条目
-2. **版本号 +1** — 第三位版本号（patch）加一，需同时更新以下位置：
+### 每次代码改动后必须自动执行（不要等用户提醒）
+
+1. **重新打包** — 运行 `build.bat`
+2. **复制到 release/** — 将安装包（`.nsis`）和应用（`.exe`）复制到 `proj_ebook/release/`（产物来源：`src-tauri/target/release/bundle/nsis/`）
+
+### git push 前额外执行
+
+3. **更新 README.md** — 在 `## 更新日志` 下新增本次修改条目
+4. **版本号 +1** — 第三位版本号（patch）加一，需同时更新以下位置：
    - `src-tauri/tauri.conf.json` → `"version": "x.y.z"`
    - `package.json` → `"version": "x.y.z"`
    - `src-tauri/Cargo.toml` → `version = "x.y.z"`
-3. **重新打包** — 运行 `build.bat`
-4. **复制到 release/** — 每次做完更新，必须将安装包（`.nsis`）和应用（`.exe`）复制到 `proj_ebook/release/` 目录（产物来源：`src-tauri/target/release/bundle/nsis/`）。**即使只是更新 README 也要重新打包并更新 release/，确保 release/ 中的产物始终与最新代码一致。**
-5. **git commit + push**（包含 release/ 中的产物更新）
-6. **上传 GitHub Release** — 使用 `gh release create v<版本号>` 将安装包和 exe 上传到 GitHub Releases 页面（`https://github.com/ASwallow/yread-lib/releases`），而非仅放在仓库的 release/ 目录中。
+5. **重新打包 + 更新 release/** — 版本号变更后需再次 build
+6. **git commit + push**（包含 release/ 中的产物更新）
+7. **上传 GitHub Release** — 使用 `gh release create v<版本号>` 将安装包和 exe 上传到 GitHub Releases 页面（`https://github.com/ASwallow/yread-lib/releases`），而非仅放在仓库的 release/ 目录中。
 
 ## Git 规范
 
@@ -97,6 +103,7 @@ scrollObserver  // IntersectionObserver 实例
 
 ## 常见陷阱
 
+0. **每次代码改动后必须自动执行 build.bat + 复制 release/（本地），不要等用户提醒。版本号 +1 和 push 只在用户要求 push 时执行**
 1. **修改 `app.js` 后需要运行 `build.bat` 重新打包**，exe 中嵌入的是 `dist/` 的内容
 2. **滚动模式的 canvas 是 CSS 尺寸 + intrinsic 尺寸两套**：未渲染时用 CSS width（高度默认150px），渲染后用 canvas.width/height 并清除 style.width
 3. **`renderScrollPage` 是异步的**：设置 canvas intrinsic 尺寸和渲染都是 async 操作

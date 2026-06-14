@@ -41,7 +41,7 @@ function localDateStr(d) {
 // ============================================================
 localforage.config({ name: 'LuminaLibrary', storeName: 'books' });
 
-let library = [];        // [{ id, name, cover, coverColor, tags, addedAt, pageCount, notes: {text,drawing}, _pdfUint8 (运行时) }]
+let library = [];        // [{ id, name, cover, coverColor, tags, addedAt, pageCount, author, publisher, isbn, notes: {text,drawing}, _pdfUint8 (运行时) }]
 let readingStats = [];   // [{ bookId, date, duration, page }]
 let openedCount = 0;
 let currentBookId = null;
@@ -87,6 +87,12 @@ let selectedHighlight = null;
 // 独立笔记状态
 let standaloneNotes = [];      // [{ id, title, content, drawing, links: [noteId], createdAt, updatedAt }]
 let currentEditNoteId = null;  // 当前编辑的笔记ID
+
+// 名词定义对照
+let glossary = [];             // [{ id, term, definition }]
+
+// 界面风格
+let currentStyle = 'glass';    // 'glass' | 'comic' | 'metal' | 'cyber'
 let noteEditorSignaturePad = null;
 let noteEditorSaveTimer = null;
 let currentNoteEditorTab = 'edit';
@@ -110,6 +116,9 @@ async function loadState() {
         // 兼容旧数据：初始化 notes 字段
         library.forEach(b => {
             if (!b.notes) b.notes = { text: '', drawing: null };
+            if (!b.author) b.author = '';
+            if (!b.publisher) b.publisher = '';
+            if (!b.isbn) b.isbn = '';
         });
         const stats = await localforage.getItem('readingStats');
         if (stats) readingStats = stats;
@@ -143,6 +152,11 @@ async function loadState() {
     }
     // 加载独立笔记（在 try-catch 外，避免影响主加载）
     await loadStandaloneNotes();
+    // 加载名词对照
+    await loadGlossary();
+    // 加载界面风格
+    const savedStyle = await localforage.getItem('uiStyle');
+    if (savedStyle) applyStyle(savedStyle);
 }
 
 // ============================================================
@@ -200,6 +214,11 @@ function applyTheme(theme) {
     applyAccentColor(theme, isLight ? lightThemeColorIdx : darkThemeColorIdx);
 }
 
+function applyStyle(style) {
+    currentStyle = style;
+    document.body.setAttribute('data-style', style);
+}
+
 function toggleTheme() {
     const isLight = document.body.classList.contains('light-theme');
     const next = isLight ? 'dark' : 'light';
@@ -217,7 +236,8 @@ async function saveLibrary() {
         coverColor: b.coverColor, tags: b.tags,
         addedAt: b.addedAt, pageCount: b.pageCount,
         fileSize: b.fileSize, notes: b.notes,
-        description: b.description || ''
+        description: b.description || '',
+        author: b.author || '', publisher: b.publisher || '', isbn: b.isbn || ''
     }));
     await localforage.setItem('library', meta);
 }
@@ -276,6 +296,21 @@ async function loadStandaloneNotes() {
 
 async function saveStandaloneNotes() {
     await localforage.setItem('standaloneNotes', standaloneNotes);
+}
+
+// ---- 名词定义对照持久化 ----
+async function loadGlossary() {
+    try {
+        const saved = await localforage.getItem('glossary');
+        if (saved && Array.isArray(saved)) glossary = saved;
+        console.log('[Lumina] 加载名词对照:', glossary.length, '条');
+    } catch (e) {
+        console.error('[Lumina] 加载名词对照失败:', e);
+    }
+}
+
+async function saveGlossary() {
+    await localforage.setItem('glossary', glossary);
 }
 
 // ============================================================
@@ -418,6 +453,9 @@ async function handleImport(event) {
             addedAt: Date.now(),
             pageCount: pageCount || 0,
             fileSize: file.size,
+            author: '',
+            publisher: '',
+            isbn: '',
             _pdfUint8: uint8
         };
 
@@ -672,7 +710,7 @@ function generatePlaceholder(name) {
 // ============================================================
 function extractDominantColor(imgSrc) {
     return new Promise(resolve => {
-        const fallback = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#818cf8';
+        const fallback = () => getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#818cf8';
         if (!imgSrc || imgSrc.length < 10) { resolve(fallback()); return; }
         const img = new Image();
         img.onload = () => {
@@ -930,22 +968,44 @@ function setupPaperTagEditor(paper) {
     const allTags = new Set(DEFAULT_PAPER_TAGS);
     papers.forEach(p => (p.tags || []).forEach(t => allTags.add(t)));
 
+    function selectPaperTag(tag) {
+        paper.tags = [tag];
+        current.innerHTML = escHtml(tag) + ' <i data-lucide="chevron-down" style="width:12px;height:12px;margin-left:4px;"></i>';
+        dropdown.classList.remove('open');
+        lucide.createIcons();
+        savePapers();
+        renderPapersShelf();
+    }
+
+    function deletePaperTag(tag) {
+        allTags.delete(tag);
+        papers.forEach(p => { if (p.tags && p.tags[0] === tag) p.tags = ['其他']; });
+        if (paper.tags[0] === tag) selectPaperTag('其他');
+        savePapers();
+        renderTagList();
+        renderPapersShelf();
+    }
+
     function renderTagList() {
         list.innerHTML = '';
         allTags.forEach(tag => {
             const div = document.createElement('div');
             div.className = 'tag-option' + (tag === paper.tags[0] ? ' active' : '');
-            div.textContent = tag;
-            div.addEventListener('click', () => {
-                paper.tags = [tag];
-                current.innerHTML = escHtml(tag) + ' <i data-lucide="chevron-down" style="width:12px;height:12px;margin-left:4px;"></i>';
-                dropdown.classList.remove('open');
-                lucide.createIcons();
-                savePapers();
-                renderPapersShelf();
-            });
+            const span = document.createElement('span');
+            span.textContent = tag;
+            span.addEventListener('click', () => selectPaperTag(tag));
+            div.appendChild(span);
+            if (tag !== '其他') {
+                const del = document.createElement('button');
+                del.className = 'tag-option-del';
+                del.title = '删除标签';
+                del.innerHTML = '<i data-lucide="x"></i>';
+                del.addEventListener('click', (e) => { e.stopPropagation(); deletePaperTag(tag); });
+                div.appendChild(del);
+            }
             list.appendChild(div);
         });
+        lucide.createIcons({ nodes: [list] });
     }
 
     current.addEventListener('click', (e) => { e.stopPropagation(); renderTagList(); dropdown.classList.toggle('open'); });
@@ -955,12 +1015,7 @@ function setupPaperTagEditor(paper) {
         const val = customInput.value.trim();
         if (!val) return;
         allTags.add(val);
-        paper.tags = [val];
-        current.innerHTML = escHtml(val) + ' <i data-lucide="chevron-down" style="width:12px;height:12px;margin-left:4px;"></i>';
-        dropdown.classList.remove('open');
-        lucide.createIcons();
-        savePapers();
-        renderPapersShelf();
+        selectPaperTag(val);
         customInput.value = '';
     });
     customInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') customAdd.click(); });
@@ -1066,6 +1121,64 @@ async function startPaperReading(paperId, autoQuickView) {
         lucide.createIcons();
     }
 }
+/** 水平拖动滚动 bookshelf 容器（带惯性 + 防误点） */
+function initShelfDrag(container) {
+    let shelf = null, startX = 0, scrollStart = 0;
+    let lastX = 0, lastT = 0, velocity = 0;
+    let rafId = null, moved = false;
+
+    container.addEventListener('mousedown', (e) => {
+        const s = e.target.closest('.bookshelf');
+        if (!s || e.target.closest('.font-size-control')) return;
+        shelf = s; startX = lastX = e.pageX; scrollStart = shelf.scrollLeft;
+        lastT = performance.now(); velocity = 0; moved = false;
+        if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+        // 立即禁止 smooth scroll，防止跟手延迟
+        shelf.style.scrollBehavior = 'auto';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (!shelf) return;
+        const dx = e.pageX - startX;
+        if (!moved && Math.abs(dx) > 4) { moved = true; shelf.classList.add('dragging'); }
+        if (!moved) return;
+        const now = performance.now();
+        const dt = now - lastT;
+        if (dt > 0) velocity = (e.pageX - lastX) / dt;
+        lastX = e.pageX; lastT = now;
+        // 用 rAF 保证渲染帧同步
+        if (!rafId) {
+            rafId = requestAnimationFrame(() => {
+                shelf.scrollLeft = scrollStart - dx;
+                rafId = null;
+            });
+        }
+    });
+    document.addEventListener('mouseup', (e) => {
+        if (!shelf) return;
+        const wasDragging = moved;
+        shelf.classList.remove('dragging');
+        shelf.style.scrollBehavior = '';
+        // 惯性滚动
+        const target = shelf;
+        const decelerate = () => {
+            velocity *= 0.94;
+            if (Math.abs(velocity) < 0.02) { rafId = null; return; }
+            target.scrollLeft -= velocity * 16;
+            rafId = requestAnimationFrame(decelerate);
+        };
+        if (moved && Math.abs(velocity) > 0.15) {
+            rafId = requestAnimationFrame(decelerate);
+        }
+        shelf = null;
+        // 阻止拖动后的 click 事件冒泡
+        if (wasDragging) {
+            const captureClick = (ev) => { ev.stopPropagation(); ev.preventDefault(); document.removeEventListener('click', captureClick, true); };
+            document.addEventListener('click', captureClick, true);
+        }
+    });
+}
+
 function renderShelf() {
     const container = document.getElementById('shelf-container');
     const filterBar = document.getElementById('tag-filter-bar');
@@ -1113,7 +1226,7 @@ function renderShelf() {
         ? library
         : library.filter(b => (b.tags[0] || '其他') === activeTagFilter);
 
-    // 按标签分组（全部模式下分组，筛选模式下不分组）
+    // 按标签分组（全部模式下分组，筛选模式下网格排布）
     let html = '';
     if (activeTagFilter === '全部') {
         const groups = {};
@@ -1126,7 +1239,11 @@ function renderShelf() {
             html += renderBookGroup(tag, books);
         }
     } else {
-        html = renderBookGroup(activeTagFilter, filtered);
+        html += `<div class="bookshelf-grid">`;
+        for (const book of filtered) {
+            html += renderBookCard(book);
+        }
+        html += `</div>`;
     }
 
     container.innerHTML = html;
@@ -1156,29 +1273,34 @@ function renderShelf() {
     lucide.createIcons();
 }
 
+function renderBookCard(book) {
+    const hasRealCover = book.cover && book.cover.startsWith('data:');
+    const coverSrc = hasRealCover ? book.cover : generatePlaceholder(book.name);
+    return `
+        <div class="book-card" data-id="${book.id}">
+            <div class="book-cover">
+                <img src="${coverSrc}" alt="${escHtml(book.name)}" loading="lazy">
+                <div class="book-spine" style="background:linear-gradient(to right, ${book.coverColor || 'var(--accent)'}, transparent);"></div>
+                <div class="book-title-overlay">
+                    <div class="name">${escHtml(book.name)}</div>
+                    ${book.pageCount ? `<div class="pages">${book.pageCount} 页</div>` : ''}
+                </div>
+            </div>
+            <div class="book-card-name" style="font-size:${bookNameFontSize}px">${escHtml(book.name)}</div>
+            ${book.author ? `<div class="book-card-author">${escHtml(book.author)}</div>` : ''}
+            <div class="font-size-control" title="拖动调整字号">
+                <span class="font-size-icon">A</span>
+                <input type="range" class="font-size-slider" min="12" max="48" value="${bookNameFontSize}" data-stop-prop="true">
+                <span class="font-size-icon" style="font-size:16px">A</span>
+            </div>
+        </div>`;
+}
+
 function renderBookGroup(tag, books) {
     let html = `<div class="shelf-group-label">${escHtml(tag)} <span>(${books.length})</span></div>`;
     html += `<div class="bookshelf">`;
     for (const book of books) {
-        const hasRealCover = book.cover && book.cover.startsWith('data:');
-        const coverSrc = hasRealCover ? book.cover : generatePlaceholder(book.name);
-        html += `
-            <div class="book-card" data-id="${book.id}">
-                <div class="book-cover">
-                    <img src="${coverSrc}" alt="${escHtml(book.name)}" loading="lazy">
-                    <div class="book-spine" style="background:linear-gradient(to right, ${book.coverColor || 'var(--accent)'}, transparent);"></div>
-                    <div class="book-title-overlay">
-                        <div class="name">${escHtml(book.name)}</div>
-                        ${book.pageCount ? `<div class="pages">${book.pageCount} 页</div>` : ''}
-                    </div>
-                </div>
-                <div class="book-card-name" style="font-size:${bookNameFontSize}px">${escHtml(book.name)}</div>
-                <div class="font-size-control" title="拖动调整字号">
-                    <span class="font-size-icon">A</span>
-                    <input type="range" class="font-size-slider" min="12" max="48" value="${bookNameFontSize}" data-stop-prop="true">
-                    <span class="font-size-icon" style="font-size:16px">A</span>
-                </div>
-            </div>`;
+        html += renderBookCard(book);
     }
     html += `</div>`;
     return html;
@@ -1202,8 +1324,16 @@ async function openDetail(bookId) {
 
     const bookDesc = book.description || '';
     const content = document.getElementById('detail-content');
+    const bookMin = readingStats.filter(s => s.bookId === book.id).reduce((s, r) => s + r.duration, 0);
+    const readTimeStr = bookMin > 0 ? (bookMin >= 60 ? (bookMin / 60).toFixed(1) + ' 小时' : bookMin + ' 分钟') : '';
 
     content.innerHTML = `
+        <div class="detail-float-bar" id="detail-float-bar">
+            <span class="detail-float-title">${escHtml(book.name)}</span>
+            <span class="detail-float-tag">${escHtml(book.tags[0] || '其他')}</span>
+            ${book.pageCount ? `<span class="detail-float-info">${book.pageCount} 页</span>` : ''}
+            ${readTimeStr ? `<span class="detail-float-info">已读 ${readTimeStr}</span>` : ''}
+        </div>
         <div class="detail-hero">
             <img class="detail-hero-blur" src="${coverSrc}">
             <div class="detail-hero-fade"></div>
@@ -1230,10 +1360,7 @@ async function openDetail(bookId) {
                     </div>
                     ${book.pageCount ? `<div class="info">${book.pageCount} 页</div>` : ''}
                     <div class="info">添加于 ${new Date(book.addedAt).toLocaleDateString('zh-CN')}</div>
-                    ${(() => {
-                        const bookMin = readingStats.filter(s => s.bookId === book.id).reduce((s, r) => s + r.duration, 0);
-                        return bookMin > 0 ? `<div class="info">已读 ${bookMin >= 60 ? (bookMin / 60).toFixed(1) + ' 小时' : bookMin + ' 分钟'}</div>` : '';
-                    })()}
+                    ${readTimeStr ? `<div class="info">已读 ${readTimeStr}</div>` : ''}
                 </div>
             </div>
             <div class="detail-actions">
@@ -1246,6 +1373,16 @@ async function openDetail(bookId) {
                 <button class="btn btn-delete" id="btn-del-${book.id}">
                     <i data-lucide="trash-2"></i> 删除
                 </button>
+            </div>
+            <!-- 书籍信息 -->
+            <div class="summary-card">
+                <div class="summary-header">
+                    <i data-lucide="info"></i>
+                    <span>书籍信息</span>
+                </div>
+                <div class="meta-edit-row"><label>作者</label><input type="text" class="meta-field" data-field="author" value="${escHtml(book.author || '')}" placeholder="作者姓名"></div>
+                <div class="meta-edit-row"><label>出版社</label><input type="text" class="meta-field" data-field="publisher" value="${escHtml(book.publisher || '')}" placeholder="出版社名称"></div>
+                <div class="meta-edit-row"><label>ISBN</label><input type="text" class="meta-field" data-field="isbn" value="${escHtml(book.isbn || '')}" placeholder="ISBN 编号"></div>
             </div>
             <div class="summary-card">
                 <div class="summary-header">
@@ -1261,6 +1398,19 @@ async function openDetail(bookId) {
     document.getElementById(`btn-cover-${book.id}`).addEventListener('click', () => openCoverGen(book.id));
     document.getElementById(`btn-del-${book.id}`).addEventListener('click', () => deleteBook(book.id));
 
+    // 元数据自动保存
+    let metaTimer = null;
+    content.querySelectorAll('.meta-field').forEach(input => {
+        input.addEventListener('input', () => {
+            clearTimeout(metaTimer);
+            metaTimer = setTimeout(async () => {
+                book[input.dataset.field] = input.value;
+                await saveLibrary();
+                renderShelf();
+            }, 500);
+        });
+    });
+
     // 设置标签编辑器
     setupTagEditor(book);
 
@@ -1269,6 +1419,16 @@ async function openDetail(bookId) {
 
     // 设置读书笔记自动保存
     setupDescriptionEditor(book);
+
+    // 浮动信息条：滚动时当 detail-top 离开视口时显示
+    const floatBar = document.getElementById('detail-float-bar');
+    const detailTop = content.querySelector('.detail-top');
+    if (floatBar && detailTop) {
+        const floatObserver = new IntersectionObserver(([entry]) => {
+            floatBar.classList.toggle('visible', !entry.isIntersecting);
+        }, { root: content, threshold: 0 });
+        floatObserver.observe(detailTop);
+    }
 
     document.getElementById('detail-overlay').classList.add('open');
     lucide.createIcons();
@@ -1295,10 +1455,25 @@ function setupTagEditor(book) {
         allTags.forEach(tag => {
             const div = document.createElement('div');
             div.className = 'tag-option' + (tag === book.tags[0] ? ' active' : '');
-            div.textContent = tag;
-            div.addEventListener('click', () => selectTag(tag));
+            const span = document.createElement('span');
+            span.textContent = tag;
+            span.addEventListener('click', () => selectTag(tag));
+            div.appendChild(span);
+            // "其他"为默认兜底标签，不允许删除
+            if (tag !== '其他') {
+                const del = document.createElement('button');
+                del.className = 'tag-option-del';
+                del.title = '删除标签';
+                del.innerHTML = '<i data-lucide="x"></i>';
+                del.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteTag(tag);
+                });
+                div.appendChild(del);
+            }
             list.appendChild(div);
         });
+        lucide.createIcons({ nodes: [list] });
     }
 
     function selectTag(tag) {
@@ -1308,6 +1483,19 @@ function setupTagEditor(book) {
         lucide.createIcons();
         saveLibrary();
         renderShelf(); // 更新书架分组
+    }
+
+    function deleteTag(tag) {
+        allTags.delete(tag);
+        // 将使用该标签的书籍全部归类到"其他"
+        library.forEach(b => {
+            if (b.tags && b.tags[0] === tag) b.tags = ['其他'];
+        });
+        // 如果当前书被影响，更新显示
+        if (book.tags[0] === tag) selectTag('其他');
+        saveLibrary();
+        renderTagList();
+        renderShelf();
     }
 
     // 点击当前标签打开/关闭下拉
@@ -2224,6 +2412,21 @@ function initFabGroup() {
     if (!group) return;
     let isDragging = false, hasMoved = false;
     let startX, startY, startLeft, startTop;
+    // 记录拖动开始时各面板的位置，用于跟随移动
+    let panelSnapshots = [];
+
+    // 将面板 clamp 在视口内
+    function clampPanel(panel) {
+        const pH = panel.offsetHeight, pW = panel.offsetWidth;
+        let t = parseInt(panel.style.top) || 0;
+        let l = parseInt(panel.style.left) || 0;
+        if (t < 8) t = 8;
+        if (t + pH > window.innerHeight - 8) t = window.innerHeight - pH - 8;
+        if (l < 8) l = 8;
+        if (l + pW > window.innerWidth - 8) l = window.innerWidth - pW - 8;
+        panel.style.top = t + 'px';
+        panel.style.left = l + 'px';
+    }
 
     // 拖动整个组
     group.addEventListener('mousedown', onDown);
@@ -2236,6 +2439,14 @@ function initFabGroup() {
         startX = pt.clientX; startY = pt.clientY;
         const rect = group.getBoundingClientRect();
         startLeft = rect.left; startTop = rect.top;
+        // 记录已打开面板的起始位置
+        panelSnapshots = [];
+        ['glossary-panel', 'calc-panel'].forEach(id => {
+            const p = document.getElementById(id);
+            if (p && p.classList.contains('open')) {
+                panelSnapshots.push({ el: p, startTop: parseInt(p.style.top) || 0, startLeft: parseInt(p.style.left) || 0 });
+            }
+        });
         group.classList.add('dragging');
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
@@ -2251,6 +2462,12 @@ function initFabGroup() {
         group.style.left = (startLeft + dx) + 'px';
         group.style.top = (startTop + dy) + 'px';
         group.style.right = 'auto'; group.style.bottom = 'auto';
+        // 跟随移动已打开的面板，并 clamp
+        panelSnapshots.forEach(s => {
+            s.el.style.top = (s.startTop + dy) + 'px';
+            s.el.style.left = (s.startLeft + dx) + 'px';
+            clampPanel(s.el);
+        });
     }
     function onUp() {
         isDragging = false;
@@ -2266,7 +2483,7 @@ function initFabGroup() {
         if (!hasMoved && !document.getElementById('reader-overlay').classList.contains('open')) openSearch();
     });
     document.getElementById('fab-calc').addEventListener('click', () => { if (!hasMoved) toggleCalc(group); });
-    document.getElementById('fab-empty1').addEventListener('click', () => { if (!hasMoved) {} });
+    document.getElementById('fab-glossary').addEventListener('click', () => { if (!hasMoved) toggleGlossary(group); });
     document.getElementById('fab-empty2').addEventListener('click', () => { if (!hasMoved) {} });
 
     // 监听阅读器状态，动态禁用搜索按钮
@@ -2775,6 +2992,193 @@ function initCalc() {
     });
     // 进制转换初始化
     initBaseConversion();
+}
+
+// ============================================================
+//  名词定义对照
+// ============================================================
+function toggleGlossary(group) {
+    const panel = document.getElementById('glossary-panel');
+    if (panel.classList.contains('open')) { closeGlossary(); return; }
+    const rect = group.getBoundingClientRect();
+    panel.classList.add('open');
+    lucide.createIcons({ nodes: [panel] });
+    renderGlossaryList();
+    // 定位：与计算器面板逻辑一致
+    const panelH = panel.offsetHeight;
+    const panelW = panel.offsetWidth;
+    let top = rect.top - 40;
+    let left = rect.left - panelW - 8;
+    if (top + panelH > window.innerHeight - 8) top = window.innerHeight - panelH - 8;
+    if (top < 8) top = 8;
+    if (left < 8) left = rect.right + 8;
+    if (left + panelW > window.innerWidth - 8) left = window.innerWidth - panelW - 8;
+    panel.style.top = top + 'px';
+    panel.style.left = left + 'px';
+    // 自动聚焦搜索框
+    setTimeout(() => document.getElementById('glossary-search').focus(), 100);
+}
+
+function closeGlossary() {
+    document.getElementById('glossary-panel').classList.remove('open');
+    resetGlossaryForm();
+    document.getElementById('glossary-search').value = '';
+}
+
+/** 将 Markdown + LaTeX 文本渲染为 HTML（与笔记预览同一模式） */
+function renderMarkdownLatex(text) {
+    let html = (typeof marked !== 'undefined') ? marked.parse(text) : escHtml(text);
+    if (typeof katex !== 'undefined') {
+        html = html.replace(/\$\$([\s\S]+?)\$\$/g, (_, expr) => {
+            try { return katex.renderToString(expr.trim(), { displayMode: true, throwOnError: false }); }
+            catch { return `<code>${escHtml(expr)}</code>`; }
+        });
+        html = html.replace(/\$([^\$\n]+?)\$/g, (_, expr) => {
+            try { return katex.renderToString(expr.trim(), { displayMode: false, throwOnError: false }); }
+            catch { return `<code>${escHtml(expr)}</code>`; }
+        });
+    }
+    return html;
+}
+
+let glossaryEditingId = null;  // 正在编辑的名词 ID，null 表示新增模式
+const GLOSSARY_RECENT_COUNT = 8;
+
+function renderGlossaryList(filter) {
+    const list = document.getElementById('glossary-list');
+    const keyword = (filter || document.getElementById('glossary-search').value || '').trim().toLowerCase();
+    let items, isSearch = false;
+    if (keyword) {
+        // 搜索模式：匹配所有，按拼音排序
+        items = glossary.filter(g => g.term.toLowerCase().includes(keyword));
+        items.sort((a, b) => a.term.localeCompare(b.term, 'zh'));
+        isSearch = true;
+    } else {
+        // 默认：显示最近添加的几条（ID 含时间戳，大的更新）
+        items = glossary.slice().sort((a, b) => b.id.localeCompare(a.id)).slice(0, GLOSSARY_RECENT_COUNT);
+    }
+    if (items.length === 0) {
+        list.innerHTML = '<div class="glossary-empty">' + (keyword ? '未找到匹配项' : '暂无名词，点击 + 添加') + '</div>';
+        return;
+    }
+    const showCount = !keyword && glossary.length > GLOSSARY_RECENT_COUNT;
+    list.innerHTML = (showCount ? `<div class="glossary-count">显示最近 ${items.length} / 共 ${glossary.length} 条</div>` : '') +
+        items.map(g => `
+        <div class="glossary-item" data-id="${g.id}">
+            <div class="glossary-item-term">${escHtml(g.term)}</div>
+            <div class="glossary-item-def">${renderMarkdownLatex(g.definition)}</div>
+            <div class="glossary-item-actions">
+                <button class="glossary-item-edit" data-id="${g.id}" title="编辑"><i data-lucide="pencil"></i></button>
+                <button class="glossary-item-del" data-id="${g.id}" title="删除"><i data-lucide="x"></i></button>
+            </div>
+        </div>
+    `).join('');
+    lucide.createIcons({ nodes: [list] });
+}
+
+/** 打开表单，预填数据进入编辑模式 */
+function editGlossaryTerm(id) {
+    const item = glossary.find(g => g.id === id);
+    if (!item) return;
+    glossaryEditingId = id;
+    const form = document.getElementById('glossary-form');
+    form.classList.remove('hidden');
+    document.getElementById('glossary-term-input').value = item.term;
+    document.getElementById('glossary-def-input').value = item.definition;
+    updateGlossaryPreview();
+    document.getElementById('glossary-save-btn').textContent = '更新';
+    document.getElementById('glossary-term-input').focus();
+}
+
+/** 更新 Markdown 实时预览 */
+function updateGlossaryPreview() {
+    const preview = document.getElementById('glossary-preview');
+    const text = document.getElementById('glossary-def-input').value.trim();
+    preview.innerHTML = text ? renderMarkdownLatex(text) : '';
+    preview.classList.toggle('hidden', !text);
+}
+
+/** 保存（新增或更新） */
+function saveGlossaryTerm() {
+    const termInput = document.getElementById('glossary-term-input');
+    const defInput = document.getElementById('glossary-def-input');
+    const term = termInput.value.trim();
+    const definition = defInput.value.trim();
+    if (!term) { termInput.focus(); return; }
+    if (glossaryEditingId) {
+        // 更新模式
+        const item = glossary.find(g => g.id === glossaryEditingId);
+        if (item) { item.term = term; item.definition = definition || '(暂无定义)'; }
+    } else {
+        // 新增模式
+        glossary.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), term, definition: definition || '(暂无定义)' });
+    }
+    saveGlossary();
+    resetGlossaryForm();
+    renderGlossaryList();
+}
+
+function resetGlossaryForm() {
+    glossaryEditingId = null;
+    document.getElementById('glossary-form').classList.add('hidden');
+    document.getElementById('glossary-term-input').value = '';
+    document.getElementById('glossary-def-input').value = '';
+    document.getElementById('glossary-preview').innerHTML = '';
+    document.getElementById('glossary-preview').classList.add('hidden');
+    document.getElementById('glossary-save-btn').textContent = '保存';
+}
+
+function deleteGlossaryTerm(id) {
+    glossary = glossary.filter(g => g.id !== id);
+    saveGlossary();
+    renderGlossaryList();
+}
+
+function initGlossary() {
+    // 添加按钮：展开/收开表单（新增模式）
+    document.getElementById('glossary-add-btn').addEventListener('click', () => {
+        const form = document.getElementById('glossary-form');
+        if (glossaryEditingId) { resetGlossaryForm(); return; }
+        form.classList.toggle('hidden');
+        if (!form.classList.contains('hidden')) {
+            glossaryEditingId = null;
+            document.getElementById('glossary-save-btn').textContent = '保存';
+            document.getElementById('glossary-term-input').focus();
+        }
+    });
+    // 保存/更新
+    document.getElementById('glossary-save-btn').addEventListener('click', saveGlossaryTerm);
+    // 取消
+    document.getElementById('glossary-cancel-btn').addEventListener('click', resetGlossaryForm);
+    // 实时 Markdown 预览
+    document.getElementById('glossary-def-input').addEventListener('input', updateGlossaryPreview);
+    // 搜索（实时过滤）
+    document.getElementById('glossary-search').addEventListener('input', (e) => {
+        renderGlossaryList(e.target.value);
+    });
+    // 回车保存
+    document.getElementById('glossary-def-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveGlossaryTerm(); }
+    });
+    document.getElementById('glossary-term-input').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('glossary-def-input').focus(); }
+    });
+    // 编辑 + 删除（事件委托）
+    document.getElementById('glossary-list').addEventListener('click', (e) => {
+        const editBtn = e.target.closest('.glossary-item-edit');
+        const delBtn = e.target.closest('.glossary-item-del');
+        if (editBtn) editGlossaryTerm(editBtn.dataset.id);
+        else if (delBtn) deleteGlossaryTerm(delBtn.dataset.id);
+    });
+    // 关闭按钮
+    document.getElementById('btn-close-glossary').addEventListener('click', closeGlossary);
+    // 面板外点击关闭
+    document.addEventListener('mousedown', (e) => {
+        const panel = document.getElementById('glossary-panel');
+        if (panel.classList.contains('open') && !panel.contains(e.target) && !document.getElementById('fab-glossary').contains(e.target)) {
+            closeGlossary();
+        }
+    });
 }
 
 // ============================================================
@@ -3300,7 +3704,7 @@ let papersTagsChart = null;
 
 /** 从当前主题色生成一组调色板（10色） */
 function generateAccentPalette() {
-    const root = getComputedStyle(document.documentElement);
+    const root = getComputedStyle(document.body);
     const hex = root.getPropertyValue('--accent').trim() || '#818cf8';
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -3328,17 +3732,20 @@ function generateAccentPalette() {
 
 function renderDashboard() {
     const tagColors = generateAccentPalette();
+    const cs = getComputedStyle(document.body);
+    const tickColor = cs.getPropertyValue('--text-secondary').trim() || '#a1a1aa';
+    const gridColor = cs.getPropertyValue('--border').trim() || 'rgba(255,255,255,0.03)';
     const chartOpts = {
         responsive: true,
         plugins: { legend: { display: false } },
         scales: {
-            x: { ticks: { color: '#a1a1aa', font: { size: 12 } }, grid: { color: 'rgba(255,255,255,0.03)' } },
-            y: { ticks: { color: '#a1a1aa', font: { size: 12 } }, grid: { color: 'rgba(255,255,255,0.03)' } }
+            x: { ticks: { color: tickColor, font: { size: 12 } }, grid: { color: gridColor } },
+            y: { ticks: { color: tickColor, font: { size: 12 } }, grid: { color: gridColor } }
         }
     };
     const doughnutOpts = (legend) => ({
         responsive: true,
-        plugins: { legend: { position: 'bottom', labels: { color: '#a1a1aa', padding: 12, usePointStyle: true, pointStyle: 'circle', font: { size: 11 } } } }
+        plugins: { legend: { position: 'bottom', labels: { color: tickColor, padding: 12, usePointStyle: true, pointStyle: 'circle', font: { size: 11 } } } }
     });
 
     // 判断每条记录是书籍还是论文
@@ -3369,7 +3776,7 @@ function renderDashboard() {
     const booksWeek = {}; weekKeys.forEach(k => booksWeek[k] = 0);
     bookStats.forEach(r => { const k = r.date.slice(5, 10); if (booksWeek[k] !== undefined) booksWeek[k] += r.duration; });
 
-    const accentRGB = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() || '129,140,248';
+    const accentRGB = getComputedStyle(document.body).getPropertyValue('--accent-rgb').trim() || '129,140,248';
 
     if (booksWeeklyChart) booksWeeklyChart.destroy();
     booksWeeklyChart = new Chart(document.getElementById('chart-books-weekly'), {
@@ -3658,7 +4065,7 @@ function renderHeatmap() {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     heatmapCells = [];
-    const accentRGB = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() || '129,140,248';
+    const accentRGB = getComputedStyle(document.body).getPropertyValue('--accent-rgb').trim() || '129,140,248';
     const isLight = document.body.classList.contains('light-theme');
 
     // 按日期聚合
@@ -3713,7 +4120,7 @@ function renderHeatmap() {
 
         // 星期标签
         ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'right';
-        ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || (isLight ? '#52525b' : '#a1a1aa');
         ['', '一', '', '三', '', '五', ''].forEach((l, d) => {
             if (l) ctx.fillText(l, labelW - 4, labelH + d * (cellSize + gap) + cellSize - 2);
         });
@@ -3729,7 +4136,7 @@ function renderHeatmap() {
             const m = cur.getMonth();
             if (m !== lastMonth && dow === 0) {
                 const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-                ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || (isLight ? '#52525b' : '#a1a1aa');
                 ctx.fillText(monthNames[m], x + cellSize / 2, labelH - 6);
                 lastMonth = m;
             }
@@ -3750,14 +4157,14 @@ function renderHeatmap() {
         // 图例
         const legendY = labelH + 7 * (cellSize + gap) + 4;
         ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'left';
-        ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || (isLight ? '#52525b' : '#a1a1aa');
         ctx.fillText('少', labelW, legendY + 9);
         for (let i = 0; i < 5; i++) {
             ctx.beginPath(); ctx.roundRect(labelW + 18 + i * (cellSize + gap), legendY, cellSize, cellSize, 2);
             ctx.fillStyle = i === 0 ? `rgba(${accentRGB},0.15)` : `rgba(${accentRGB},${0.2 + (i / 4) * 0.8})`;
             ctx.fill();
         }
-        ctx.fillStyle = isLight ? '#71717a' : '#52525b';
+        ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-tertiary').trim() || (isLight ? '#71717a' : '#52525b');
         ctx.fillText('多', labelW + 18 + 5 * (cellSize + gap) + 2, legendY + 9);
 
     } else if (heatmapView === 'month') {
@@ -3784,7 +4191,7 @@ function renderHeatmap() {
         const monthNames = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
         ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
         for (let m = 0; m < 12; m++) {
-            ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || (isLight ? '#52525b' : '#a1a1aa');
             ctx.fillText(monthNames[m], labelW + m * (mCellSize + mGap) + mCellSize / 2, labelH - 6);
         }
         // 日期标签
@@ -3848,13 +4255,13 @@ function renderHeatmap() {
         // 年份标签
         ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
         for (let i = 0; i < 5; i++) {
-            ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || (isLight ? '#52525b' : '#a1a1aa');
             ctx.fillText(String(year - 4 + i), labelW + i * (cellSz + gap2) + cellSz / 2, labelH - 6);
         }
         // 月份标签
         ctx.textAlign = 'right';
         for (let m = 0; m < 12; m++) {
-            ctx.fillStyle = isLight ? '#52525b' : '#a1a1aa';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || (isLight ? '#52525b' : '#a1a1aa');
             ctx.fillText(monthNames[m], labelW - 4, labelH + m * (cellSz + gap2) + cellSz - 3);
         }
         for (let i = 0; i < 5; i++) {
@@ -3938,7 +4345,7 @@ function renderTimePeriodHistogram() {
     const canvas = document.getElementById('chart-time-period');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const accentRGB = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() || '129,140,248';
+    const accentRGB = getComputedStyle(document.body).getPropertyValue('--accent-rgb').trim() || '129,140,248';
     const isLight = document.body.classList.contains('light-theme');
 
     // 按小时聚合
@@ -3970,7 +4377,7 @@ function renderTimePeriodHistogram() {
 
     // Y 轴标签
     ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'right';
-    ctx.fillStyle = isLight ? '#3f3f46' : '#d4d4d8';
+    ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim() || (isLight ? '#3f3f46' : '#d4d4d8');
     for (let i = 0; i <= 4; i++) {
         const v = Math.round(maxVal * (4 - i) / 4);
         const label = v >= 60 ? (v / 60).toFixed(0) + 'h' : v + 'm';
@@ -3995,7 +4402,7 @@ function renderTimePeriodHistogram() {
         // X 轴标签
         if (h % 3 === 0) {
             ctx.font = '12px system-ui, sans-serif'; ctx.textAlign = 'center';
-            ctx.fillStyle = isLight ? '#3f3f46' : '#d4d4d8';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim() || (isLight ? '#3f3f46' : '#d4d4d8');
             ctx.fillText(String(h).padStart(2, '0'), x + barW / 2, H - 6);
         }
     }
@@ -4719,6 +5126,9 @@ function handlePdfSearchInput(e) {
 }
 
 function bindEvents() {
+    // 书架水平拖动滚动
+    initShelfDrag(document.getElementById('shelf-container'));
+
     // 主题切换
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
@@ -4750,6 +5160,7 @@ function bindEvents() {
     // 悬浮按钮组拖动 + 计算器
     initFabGroup();
     initCalc();
+    initGlossary();
 
     // 封面生成器
     document.getElementById('btn-close-cover-gen').addEventListener('click', closeCoverGen);
@@ -4876,8 +5287,8 @@ function bindEvents() {
                 if (highlightMode) exitHighlightMode();
                 else closeReader();
                 break;
-            case '+': case '=': zoomIn(); break;
-            case '-': zoomOut(); break;
+            case '+': case '=': if (e.ctrlKey) { e.preventDefault(); zoomIn(); } break;
+            case '-': if (e.ctrlKey) { e.preventDefault(); zoomOut(); } break;
         }
     });
 
@@ -5814,7 +6225,7 @@ async function openGraph() {
             ctx.fill();
 
             // 标签
-            ctx.fillStyle = document.body.classList.contains('light-theme') ? '#18181b' : '#e4e4e7';
+            ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-primary').trim() || (document.body.classList.contains('light-theme') ? '#18181b' : '#e4e4e7');
             ctx.font = '12px "Segoe UI", system-ui, sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(n.label.length > 10 ? n.label.substring(0, 10) + '…' : n.label, n.x, n.y + n.radius + 16);
@@ -6238,8 +6649,8 @@ function generatePenroseBackground() {
 
     const isLight = document.body.classList.contains('light-theme');
     // 取当前主题色
-    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#818cf8';
-    const accentRGB = getComputedStyle(document.documentElement).getPropertyValue('--accent-rgb').trim() || '129,140,248';
+    const accent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#818cf8';
+    const accentRGB = getComputedStyle(document.body).getPropertyValue('--accent-rgb').trim() || '129,140,248';
     // 主题色（暗主题下提高对比度）
     const fillA = isLight ? `rgba(${accentRGB},0.12)` : `rgba(${accentRGB},0.35)`;
     const fillB = isLight ? `rgba(${accentRGB},0.05)` : `rgba(${accentRGB},0.15)`;
@@ -6294,6 +6705,21 @@ function generatePenroseBackground() {
 
 // ---- 设置页 ----
 function initSettings() {
+    // 界面风格选择器
+    const picker = document.getElementById('style-picker');
+    if (picker) {
+        picker.querySelectorAll('.style-card').forEach(card => {
+            card.classList.toggle('active', card.dataset.style === currentStyle);
+            card.addEventListener('click', () => {
+                const style = card.dataset.style;
+                applyStyle(style);
+                localforage.setItem('uiStyle', style);
+                picker.querySelectorAll('.style-card').forEach(c => c.classList.toggle('active', c.dataset.style === style));
+                generatePenroseBackground();
+            });
+        });
+    }
+
     const slider = document.getElementById('penrose-opacity-slider');
     const valueEl = document.getElementById('penrose-opacity-value');
     if (!slider) return;
